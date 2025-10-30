@@ -92,14 +92,6 @@ Python 3.8+
 
 Pygame (instalar con pip install pygame)
 
-🚀 Cómo Ejecutarlo
-
-Clona o descarga el proyecto:
-
-git clone https://github.com/usuario/space-invaders-patterns.git
-cd space-invaders-patterns
-
-
 Instala dependencias:
 
 pip install pygame
