@@ -1,0 +1,407 @@
+import pygame
+import sys
+from abc import ABC, abstractmethod
+
+"""
+SPACE INVADERS - PATRONES DE DISEÑO IMPLEMENTADOS:
+
+1. PATRÓN COMMAND: 
+   - Cada acción del jugador (moverse, disparar) se encapsula como un objeto comando
+   - Permite desacoplar la invocación de la ejecución de acciones
+   - Facilita la extensión con nuevos comandos
+
+2. PATRÓN CHAIN OF RESPONSIBILITY:
+   - Para manejar colisiones y eventos del juego en una cadena de responsabilidades
+   - Cada handler se especializa en una tarea específica
+   - Los eventos pasan por la cadena hasta que son manejados
+"""
+
+# ========== PATRÓN COMMAND ==========
+"""
+El patrón Command encapsula una solicitud como un objeto, lo que permite 
+parametrizar clientes con diferentes solicitudes, encolar o registrar solicitudes, 
+y soportar operaciones que pueden deshacerse.
+"""
+
+class Command(ABC):
+    """Interfaz base para todos los comandos del juego"""
+    
+    @abstractmethod
+    def execute(self, player, bullets, all_sprites):
+        """
+        Ejecuta el comando específico
+        Args:
+            player: Instancia del jugador
+            bullets: Grupo de balas
+            all_sprites: Grupo de todos los sprites
+        """
+        pass
+
+
+class MoveLeftCommand(Command):
+    """Comando concreto para mover el jugador a la izquierda"""
+    
+    def execute(self, player, bullets, all_sprites):
+        """Ejecuta el movimiento a la izquierda"""
+        player.move_left()
+        print("Comando ejecutado: Mover izquierda")
+
+
+class MoveRightCommand(Command):
+    """Comando concreto para mover el jugador a la derecha"""
+    
+    def execute(self, player, bullets, all_sprites):
+        """Ejecuta el movimiento a la derecha"""
+        player.move_right()
+        print("Comando ejecutado: Mover derecha")
+
+
+class ShootCommand(Command):
+    """Comando concreto para disparar una bala"""
+    
+    def execute(self, player, bullets, all_sprites):
+        """Ejecuta el disparo de una bala"""
+        bullet = Bullet(player.rect.centerx, player.rect.top)
+        bullets.add(bullet)
+        all_sprites.add(bullet)
+        print("Comando ejecutado: Disparar")
+
+
+# ========== PATRÓN CHAIN OF RESPONSIBILITY ==========
+"""
+El patrón Chain of Responsibility evita acoplar el emisor de una petición 
+a su receptor dando a más de un objeto la oportunidad de responder a la petición.
+"""
+
+class Handler(ABC):
+    """Handler abstracto que define la interfaz para la cadena de responsabilidad"""
+    
+    def __init__(self):
+        self._next_handler = None
+    
+    def set_next(self, handler):
+        """
+        Establece el siguiente handler en la cadena
+        Args:
+            handler: Siguiente handler en la cadena
+        Returns:
+            El handler establecido (para encadenamiento)
+        """
+        self._next_handler = handler
+        return handler
+    
+    @abstractmethod
+    def handle(self, collisions, game):
+        """
+        Maneja la solicitud o la pasa al siguiente handler
+        Args:
+            collisions: Diccionario de colisiones detectadas
+            game: Instancia del juego para acceder al estado
+        """
+        if self._next_handler:
+            self._next_handler.handle(collisions, game)
+
+
+class CollisionHandler(Handler):
+    """
+    Primer handler en la cadena - Detecta y procesa información básica de colisiones
+    """
+    
+    def handle(self, collisions, game):
+        """Maneja la detección de colisiones y pasa la información al siguiente handler"""
+        print(f"CollisionHandler: Detectadas {len(collisions)} colisiones")
+        
+        # Procesamiento específico de este handler
+        for bullet, enemies in collisions.items():
+            print(f" - Bala impactó {len(enemies)} enemigos")
+        
+        # Pasar al siguiente handler en la cadena
+        super().handle(collisions, game)
+
+
+class ScoreHandler(Handler):
+    """
+    Segundo handler en la cadena - Maneja el sistema de puntuación
+    """
+    
+    def handle(self, collisions, game):
+        """Actualiza la puntuación basado en las colisiones"""
+        puntos_obtenidos = 0
+        
+        for bullet, enemies in collisions.items():
+            puntos_por_colision = len(enemies) * 10
+            puntos_obtenidos += puntos_por_colision
+            game.score += puntos_por_colision
+        
+        if puntos_obtenidos > 0:
+            print(f"ScoreHandler: +{puntos_obtenidos} puntos! Total: {game.score}")
+        
+        # Pasar al siguiente handler en la cadena
+        super().handle(collisions, game)
+
+
+class PowerUpHandler(Handler):
+    """
+    Tercer handler en la cadena - Maneja efectos especiales y power-ups
+    """
+    
+    def handle(self, collisions, game):
+        """Activa power-ups basado en condiciones específicas"""
+        total_enemigos_eliminados = sum(len(enemies) for enemies in collisions.values())
+        
+        # Lógica de power-ups basada en el desempeño del jugador
+        if total_enemigos_eliminados >= 3:
+            print("PowerUpHandler: ¡Power-up desbloqueado! Disparo rápido activado")
+            # Aquí se implementaría la lógica del power-up
+        
+        elif total_enemigos_eliminados >= 5:
+            print("PowerUpHandler: ¡Power-up especial! Escudo activado")
+            # Aquí se implementaría otro power-up
+        
+        # Pasar al siguiente handler en la cadena (último en esta cadena)
+        super().handle(collisions, game)
+
+
+# ========== ENTIDADES DEL JUEGO ==========
+
+class Player(pygame.sprite.Sprite):
+    """Representa al jugador en el juego"""
+    
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((50, 30))
+        self.image.fill((0, 255, 0))  # Color verde para el jugador
+        self.rect = self.image.get_rect()
+        self.rect.centerx = x
+        self.rect.bottom = y
+        self.speed = 8
+    
+    def move_left(self):
+        """Mueve el jugador a la izquierda"""
+        self.rect.x -= self.speed
+        if self.rect.left < 0:
+            self.rect.left = 0
+    
+    def move_right(self):
+        """Mueve el jugador a la derecha"""
+        self.rect.x += self.speed
+        if self.rect.right > 800:
+            self.rect.right = 800
+    
+    def update(self):
+        """Actualización del jugador (se maneja mediante comandos)"""
+        pass
+
+
+class Enemy(pygame.sprite.Sprite):
+    """Representa a los enemigos en el juego"""
+    
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((40, 40))
+        self.image.fill((255, 0, 0))  # Color rojo para los enemigos
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.direction = 1
+        self.speed = 1
+    
+    def update(self):
+        """Actualiza la posición del enemigo con movimiento horizontal"""
+        self.rect.x += self.speed * self.direction
+        
+        # Cambiar dirección al llegar a los bordes y bajar una fila
+        if self.rect.right >= 800 or self.rect.left <= 0:
+            self.direction *= -1
+            self.rect.y += 20
+
+
+class Bullet(pygame.sprite.Sprite):
+    """Representa las balas disparadas por el jugador"""
+    
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((5, 10))
+        self.image.fill((255, 255, 255))  # Color blanco para las balas
+        self.rect = self.image.get_rect()
+        self.rect.centerx = x
+        self.rect.bottom = y
+        self.speed = -10  # Velocidad negativa para moverse hacia arriba
+    
+    def update(self):
+        """Actualiza la posición de la bala"""
+        self.rect.y += self.speed
+
+
+# ========== JUEGO PRINCIPAL ==========
+
+class Game:
+    """Clase principal que controla el juego y coordina todos los componentes"""
+    
+    def __init__(self):
+        # Inicialización de Pygame
+        pygame.init()
+        self.screen = pygame.display.set_mode((800, 600))
+        pygame.display.set_caption("Space Invaders - Patrones Command & Chain of Responsibility")
+        self.clock = pygame.time.Clock()
+        
+        # ========== INICIALIZACIÓN DE ENTIDADES ==========
+        self.player = Player(400, 550)
+        self.enemies = pygame.sprite.Group()
+        self.bullets = pygame.sprite.Group()
+        self.all_sprites = pygame.sprite.Group()
+        
+        self.all_sprites.add(self.player)
+        self.create_enemies()
+        
+        # ========== CONFIGURACIÓN DEL PATRÓN COMMAND ==========
+        """
+        Aquí configuramos el mapeo de teclas a comandos.
+        Cada tecla está asociada a un objeto comando específico.
+        Esto hace que agregar nuevos controles sea muy fácil.
+        """
+        self.commands = {
+            pygame.K_LEFT: MoveLeftCommand(),
+            pygame.K_RIGHT: MoveRightCommand(),
+            pygame.K_SPACE: ShootCommand()
+        }
+        
+        # ========== CONFIGURACIÓN DEL PATRÓN CHAIN OF RESPONSIBILITY ==========
+        """
+        Creamos la cadena de handlers que procesarán las colisiones.
+        Cada handler se especializa en una tarea específica y pasa
+        el control al siguiente handler en la cadena.
+        """
+        self.collision_handler = CollisionHandler()
+        self.score_handler = ScoreHandler()
+        self.powerup_handler = PowerUpHandler()
+        
+        # Configurar la cadena: Collision -> Score -> PowerUp
+        self.collision_handler.set_next(self.score_handler).set_next(self.powerup_handler)
+        
+        # ========== ESTADO DEL JUEGO ==========
+        self.score = 0
+        self.running = True
+        self.font = pygame.font.Font(None, 36)
+        
+        print("=== SPACE INVADERS INICIADO ===")
+        print("Patrones implementados:")
+        print("1. COMMAND: Movimiento y disparos encapsulados en objetos")
+        print("2. CHAIN OF RESPONSIBILITY: Manejo de colisiones en cadena")
+        print("===============================")
+    
+    def create_enemies(self):
+        """Crea la formación inicial de enemigos"""
+        for row in range(5):
+            for col in range(10):
+                enemy = Enemy(100 + col * 60, 50 + row * 50)
+                self.enemies.add(enemy)
+                self.all_sprites.add(enemy)
+    
+    def handle_events(self):
+        """Maneja los eventos de entrada usando el patrón Command"""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            
+            elif event.type == pygame.KEYDOWN:
+                # ========== APLICACIÓN DEL PATRÓN COMMAND ==========
+                """
+                Cuando se presiona una tecla, buscamos el comando correspondiente
+                y ejecutamos su método execute(). Esto desacopla completamente
+                la detección de entrada de la ejecución de acciones.
+                """
+                if event.key in self.commands:
+                    command = self.commands[event.key]
+                    command.execute(self.player, self.bullets, self.all_sprites)
+    
+    def update(self):
+        """Actualiza el estado del juego"""
+        # Actualizar todos los sprites
+        self.all_sprites.update()
+        
+        # Eliminar balas que salen de la pantalla
+        for bullet in self.bullets:
+            if bullet.rect.bottom < 0:
+                bullet.kill()
+        
+        # ========== DETECCIÓN DE COLISIONES ==========
+        """
+        Detectamos colisiones entre balas y enemigos.
+        groupcollide retorna un diccionario con las colisiones detectadas.
+        """
+        collisions = pygame.sprite.groupcollide(self.bullets, self.enemies, True, True)
+        
+        # ========== APLICACIÓN DEL PATRÓN CHAIN OF RESPONSIBILITY ==========
+        """
+        Si hay colisiones, las pasamos a través de la cadena de handlers.
+        Cada handler procesa las colisiones según su responsabilidad específica.
+        """
+        if collisions:
+            print("\n--- Inicio de procesamiento en cadena ---")
+            self.collision_handler.handle(collisions, self)
+            print("--- Fin de procesamiento en cadena ---\n")
+        
+        # ========== CONDICIONES DE VICTORIA ==========
+        if len(self.enemies) == 0:
+            self.show_win_screen()
+        
+        # ========== CONDICIÓN DE DERROTA ==========
+        for enemy in self.enemies:
+            if enemy.rect.bottom >= 550:
+                self.show_game_over()
+    
+    def show_win_screen(self):
+        """Muestra la pantalla de victoria"""
+        win_text = self.font.render("¡Ganaste! Puntuación: " + str(self.score), True, (255, 255, 255))
+        self.screen.blit(win_text, (250, 300))
+        pygame.display.flip()
+        pygame.time.wait(3000)
+        self.running = False
+    
+    def show_game_over(self):
+        """Muestra la pantalla de game over"""
+        game_over_text = self.font.render("Game Over - Puntuación: " + str(self.score), True, (255, 0, 0))
+        self.screen.blit(game_over_text, (250, 300))
+        pygame.display.flip()
+        pygame.time.wait(3000)
+        self.running = False
+    
+    def draw(self):
+        """Dibuja todos los elementos del juego"""
+        self.screen.fill((0, 0, 0))  # Fondo negro
+        
+        # Dibujar todos los sprites
+        self.all_sprites.draw(self.screen)
+        
+        # Mostrar información del juego
+        score_text = self.font.render("Puntuación: " + str(self.score), True, (255, 255, 255))
+        self.screen.blit(score_text, (10, 10))
+        
+        # Instrucciones
+        instructions = self.font.render("Controles: ← → ESPACIO", True, (200, 200, 200))
+        self.screen.blit(instructions, (10, 560))
+        
+        pygame.display.flip()
+    
+    def run(self):
+        """Bucle principal del juego"""
+        while self.running:
+            self.handle_events()
+            self.update()
+            self.draw()
+            self.clock.tick(60)  # 60 FPS
+        
+        pygame.quit()
+        sys.exit()
+
+
+# ========== INICIO DEL PROGRAMA ==========
+if __name__ == "__main__":
+    """
+    Punto de entrada del programa.
+    Crea una instancia del juego y lo ejecuta.
+    """
+    print("Iniciando Space Invaders con Patrones de Diseño...")
+    game = Game()
+    game.run()
